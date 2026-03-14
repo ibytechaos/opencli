@@ -4,6 +4,7 @@
  */
 
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -118,12 +119,12 @@ export class PlaywrightMCP {
     await this._acquireLock();
     const timeout = opts.timeout ?? CONNECT_TIMEOUT;
     const mcpPath = findMcpServerPath();
-    if (!mcpPath) throw new Error('Playwright MCP server not found. Install: npx @anthropic-ai/mcp-server-playwright');
+    if (!mcpPath) throw new Error('Playwright MCP server not found. Install: npm install -D @playwright/mcp');
 
     return new Promise<Page>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Timed out connecting to browser (${timeout}s)`)), timeout * 1000);
 
-      this._proc = spawn('node', [mcpPath], {
+      this._proc = spawn('node', [mcpPath, '--extension'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, ...(process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN ? { PLAYWRIGHT_MCP_EXTENSION_TOKEN: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN } : {}) },
       });
@@ -218,6 +219,15 @@ export class PlaywrightMCP {
 }
 
 function findMcpServerPath(): string | null {
+  // Check local node_modules first (@playwright/mcp is the modern package)
+  const localMcp = path.resolve('node_modules', '@playwright', 'mcp', 'cli.js');
+  if (fs.existsSync(localMcp)) return localMcp;
+
+  // Check project-relative path
+  const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
+  const projectMcp = path.resolve(__dirname2, '..', 'node_modules', '@playwright', 'mcp', 'cli.js');
+  if (fs.existsSync(projectMcp)) return projectMcp;
+
   // Check common locations
   const candidates = [
     path.join(os.homedir(), '.npm', '_npx'),
@@ -225,9 +235,9 @@ function findMcpServerPath(): string | null {
     '/usr/local/lib/node_modules',
   ];
 
-  // Try npx resolution
+  // Try npx resolution (legacy package name)
   try {
-    const result = execSync('npx -y --package=@anthropic-ai/mcp-server-playwright which mcp-server-playwright 2>/dev/null', { encoding: 'utf-8', timeout: 10000 }).trim();
+    const result = execSync('npx -y --package=@playwright/mcp which mcp-server-playwright 2>/dev/null', { encoding: 'utf-8', timeout: 10000 }).trim();
     if (result && fs.existsSync(result)) return result;
   } catch {}
 
@@ -241,7 +251,7 @@ function findMcpServerPath(): string | null {
   for (const base of candidates) {
     if (!fs.existsSync(base)) continue;
     try {
-      const found = execSync(`find "${base}" -name "cli.js" -path "*mcp-server-playwright*" 2>/dev/null | head -1`, { encoding: 'utf-8', timeout: 5000 }).trim();
+      const found = execSync(`find "${base}" -name "cli.js" -path "*playwright*mcp*" 2>/dev/null | head -1`, { encoding: 'utf-8', timeout: 5000 }).trim();
       if (found) return found;
     } catch {}
   }

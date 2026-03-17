@@ -7,6 +7,10 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],
+          // Run unit tests before e2e tests to avoid project-level contention in CI.
+          sequence: {
+            groupOrder: 0,
+          },
         },
       },
       {
@@ -14,6 +18,9 @@ export default defineConfig({
           name: 'e2e',
           include: ['tests/**/*.test.ts'],
           maxWorkers: 2,
+          sequence: {
+            groupOrder: 1,
+          },
         },
       },
     ],

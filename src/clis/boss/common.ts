@@ -195,16 +195,18 @@ export async function findFriendByUid(
  * @returns true if clicked, false if not found
  */
 export async function clickCandidateInList(page: IPage, numericUid: string | number): Promise<boolean> {
+  const uid = String(numericUid).replace(/[^0-9]/g, ''); // sanitize to digits only
   const result: any = await page.evaluate(`
     async () => {
-      const item = document.querySelector('#_${numericUid}-0') || document.querySelector('[id^="_${numericUid}"]');
+      const uid = ${JSON.stringify(uid)};
+      const item = document.querySelector('#_' + uid + '-0') || document.querySelector('[id^="_' + uid + '"]');
       if (item) {
         item.click();
         return { clicked: true };
       }
       const items = document.querySelectorAll('.geek-item');
       for (const el of items) {
-        if (el.id && el.id.startsWith('_${numericUid}')) {
+        if (el.id && el.id.startsWith('_' + uid)) {
           el.click();
           return { clicked: true };
         }

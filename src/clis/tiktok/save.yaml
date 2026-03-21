@@ -18,11 +18,12 @@ pipeline:
   - evaluate: |
       (async () => {
         const url = ${{ args.url | json }};
-        const btn = document.querySelector('[data-e2e="undefined-icon"]');
-        if (!btn) throw new Error('Favorites button not found');
+        const btn = document.querySelector('[data-e2e="bookmark-icon"]') ||
+                    document.querySelector('[data-e2e="collect-icon"]');
+        if (!btn) throw new Error('Favorites button not found - make sure you are logged in');
         const container = btn.closest('button') || btn.closest('[role="button"]') || btn;
-        const aria = container.getAttribute('aria-label') || '';
-        if (aria.includes('Remove from Favorites')) {
+        const aria = (container.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('remove from favorites') || aria.includes('取消收藏')) {
           return [{ status: 'Already in Favorites', url: url }];
         }
         container.click();

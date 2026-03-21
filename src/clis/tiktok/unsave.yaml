@@ -18,12 +18,15 @@ pipeline:
   - evaluate: |
       (async () => {
         const url = ${{ args.url | json }};
-        const btn = document.querySelector('[data-e2e="undefined-icon"]');
-        if (!btn) throw new Error('Favorites button not found');
+        const btn = document.querySelector('[data-e2e="bookmark-icon"]') ||
+                    document.querySelector('[data-e2e="collect-icon"]');
+        if (!btn) throw new Error('Favorites button not found - make sure you are logged in');
         const container = btn.closest('button') || btn.closest('[role="button"]') || btn;
-        const aria = container.getAttribute('aria-label') || '';
-        if (aria.includes('Add to Favorites')) {
-          return [{ status: 'Not in Favorites', url: url }];
+        const aria = (container.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('add to favorites') || aria.includes('收藏')) {
+          if (!aria.includes('remove') && !aria.includes('取消')) {
+            return [{ status: 'Not in Favorites', url: url }];
+          }
         }
         container.click();
         await new Promise(r => setTimeout(r, 2000));

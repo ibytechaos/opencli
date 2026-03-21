@@ -1,5 +1,8 @@
 /**
  * BOSS直聘 send message — via UI automation on chat page.
+ *
+ * BOSS chat uses MQTT (not HTTP) for messaging, so we must go through the UI
+ * rather than making direct API calls.
  */
 import { cli, Strategy } from '../../registry.js';
 import {

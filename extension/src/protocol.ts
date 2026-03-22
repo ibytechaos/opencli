@@ -1,11 +1,11 @@
 /**
  * opencli browser protocol — shared types between daemon, extension, and CLI.
  *
- * 5 actions: exec, navigate, tabs, cookies, screenshot.
+ * Actions: exec, navigate, tabs, cookies, screenshot, export-state, import-state.
  * Everything else is just JS code sent via 'exec'.
  */
 
-export type Action = 'exec' | 'navigate' | 'tabs' | 'cookies' | 'screenshot' | 'close-window' | 'sessions';
+export type Action = 'exec' | 'navigate' | 'tabs' | 'cookies' | 'screenshot' | 'close-window' | 'sessions' | 'export-state' | 'import-state';
 
 export interface Command {
   /** Unique request ID */
@@ -32,6 +32,34 @@ export interface Command {
   quality?: number;
   /** Whether to capture full page (not just viewport) */
   fullPage?: boolean;
+  /** Storage type to export (export-state action) */
+  storageType?: 'localStorage' | 'sessionStorage' | 'all';
+  /** Browser state to import (import-state action) */
+  state?: {
+    cookies?: Array<{
+      name: string;
+      value: string;
+      domain: string;
+      path?: string;
+      secure?: boolean;
+      httpOnly?: boolean;
+      expirationDate?: number;
+      url?: string;
+    }>;
+    localStorage?: Record<string, string>;
+    sessionStorage?: Record<string, string>;
+    indexedDB?: Array<{
+      name: string;
+      version: number;
+      objectStores: Array<{
+        name: string;
+        keyPath: string | string[] | null;
+        autoIncrement: boolean;
+        records: Array<{ key: unknown; value: unknown }>;
+      }>;
+    }>;
+    url?: string;
+  };
 }
 
 export interface Result {

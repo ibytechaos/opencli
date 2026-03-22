@@ -43,6 +43,30 @@ export interface BrowserSessionInfo {
   [key: string]: unknown;
 }
 
+export interface IndexedDBObjectStore {
+  name: string;
+  keyPath: string | string[] | null;
+  autoIncrement: boolean;
+  records: Array<{ key: unknown; value: unknown }>;
+}
+
+export interface IndexedDBSnapshot {
+  name: string;
+  version: number;
+  objectStores: IndexedDBObjectStore[];
+}
+
+export interface BrowserState {
+  version: number;
+  url: string;
+  domain: string;
+  timestamp: number;
+  cookies: BrowserCookie[];
+  localStorage: Record<string, string>;
+  sessionStorage: Record<string, string>;
+  indexedDB: IndexedDBSnapshot[];
+}
+
 export interface IPage {
   goto(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void>;
   evaluate(js: string): Promise<any>;
@@ -65,4 +89,6 @@ export interface IPage {
   installInterceptor(pattern: string): Promise<void>;
   getInterceptedRequests(): Promise<any[]>;
   screenshot(options?: ScreenshotOptions): Promise<string>;
+  exportState(opts?: { domain?: string }): Promise<BrowserState>;
+  importState(state: BrowserState): Promise<void>;
 }

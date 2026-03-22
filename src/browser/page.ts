@@ -11,7 +11,7 @@
  */
 
 import { formatSnapshot } from '../snapshotFormatter.js';
-import type { BrowserCookie, IPage, ScreenshotOptions, SnapshotOptions, WaitOptions } from '../types.js';
+import type { BrowserCookie, BrowserState, IPage, ScreenshotOptions, SnapshotOptions, WaitOptions } from '../types.js';
 import { sendCommand } from './daemon-client.js';
 import { wrapForEval } from './utils.js';
 import { generateSnapshotJs, scrollToRefJs, getFormStateJs } from './dom-snapshot.js';
@@ -265,6 +265,29 @@ export class Page implements IPage {
     // Same as installInterceptor: must go through evaluate() for IIFE wrapping
     const result = await this.evaluate(generateReadInterceptedJs('__opencli_xhr'));
     return Array.isArray(result) ? result : [];
+  }
+
+  async exportState(opts: { domain?: string } = {}): Promise<BrowserState> {
+    const result = await sendCommand('export-state', {
+      ...this._workspaceOpt(),
+      ...this._tabOpt(),
+      ...(opts.domain ? { domain: opts.domain } : {}),
+    });
+    return result as BrowserState;
+  }
+
+  async importState(state: BrowserState): Promise<void> {
+    await sendCommand('import-state', {
+      ...this._workspaceOpt(),
+      ...this._tabOpt(),
+      state: {
+        cookies: state.cookies,
+        localStorage: state.localStorage,
+        sessionStorage: state.sessionStorage,
+        indexedDB: state.indexedDB,
+        url: state.url,
+      },
+    });
   }
 }
 

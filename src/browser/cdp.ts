@@ -9,7 +9,7 @@
  */
 
 import { WebSocket, type RawData } from 'ws';
-import type { BrowserCookie, IPage, ScreenshotOptions, SnapshotOptions, WaitOptions } from '../types.js';
+import type { BrowserCookie, BrowserState, IPage, ScreenshotOptions, SnapshotOptions, WaitOptions } from '../types.js';
 import { wrapForEval } from './utils.js';
 import { generateSnapshotJs, scrollToRefJs, getFormStateJs } from './dom-snapshot.js';
 import {
@@ -322,6 +322,14 @@ class CDPPage implements IPage {
     const { generateReadInterceptedJs } = await import('../interceptor.js');
     const result = await this.evaluate(generateReadInterceptedJs('__opencli_xhr'));
     return Array.isArray(result) ? result : [];
+  }
+
+  async exportState(_opts?: { domain?: string }): Promise<BrowserState> {
+    throw new Error('exportState is not supported in CDP mode. Use daemon mode instead.');
+  }
+
+  async importState(_state: BrowserState): Promise<void> {
+    throw new Error('importState is not supported in CDP mode. Use daemon mode instead.');
   }
 }
 

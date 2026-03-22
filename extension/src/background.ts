@@ -212,6 +212,10 @@ async function handleCommand(cmd: Command): Promise<Result> {
         return await handleCloseWindow(cmd, workspace);
       case 'sessions':
         return await handleSessions(cmd);
+      case 'export-state':
+        return await handleExportState(cmd, workspace);
+      case 'import-state':
+        return await handleImportState(cmd, workspace);
       default:
         return { id: cmd.id, ok: false, error: `Unknown action: ${cmd.action}` };
     }
@@ -426,6 +430,200 @@ async function handleSessions(cmd: Command): Promise<Result> {
     idleMsRemaining: Math.max(0, session.idleDeadlineAt - now),
   })));
   return { id: cmd.id, ok: true, data };
+}
+
+// ─── State export/import handlers ──────────────────────────────────────────
+
+/** JS code to read all key-value pairs from localStorage or sessionStorage */
+const readStorageJs = (type: 'localStorage' | 'sessionStorage') => `
+  (() => {
+    try {
+      const s = window.${type};
+      const result = {};
+      for (let i = 0; i < s.length; i++) {
+        const key = s.key(i);
+        if (key !== null) result[key] = s.getItem(key);
+      }
+      return result;
+    } catch (e) { return {}; }
+  })()
+`;
+
+/** JS code to enumerate all IndexedDB databases and read all records */
+const READ_INDEXEDDB_JS = `
+  (async () => {
+    try {
+      if (!window.indexedDB || !window.indexedDB.databases) return [];
+      const dbs = await window.indexedDB.databases();
+      const results = [];
+      for (const dbInfo of dbs) {
+        if (!dbInfo.name) continue;
+        try {
+          const db = await new Promise((resolve, reject) => {
+            const req = window.indexedDB.open(dbInfo.name, dbInfo.version);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+            req.onupgradeneeded = () => { req.transaction.abort(); reject(new Error('upgrade')); };
+          });
+          const storeNames = Array.from(db.objectStoreNames);
+          const objectStores = [];
+          for (const storeName of storeNames) {
+            try {
+              const tx = db.transaction(storeName, 'readonly');
+              const store = tx.objectStore(storeName);
+              const records = await new Promise((resolve, reject) => {
+                const allReq = store.getAll();
+                const keysReq = store.getAllKeys();
+                allReq.onsuccess = () => {
+                  keysReq.onsuccess = () => {
+                    const r = [];
+                    for (let i = 0; i < allReq.result.length; i++) {
+                      r.push({ key: keysReq.result[i], value: allReq.result[i] });
+                    }
+                    resolve(r);
+                  };
+                  keysReq.onerror = () => resolve([]);
+                };
+                allReq.onerror = () => reject(allReq.error);
+              });
+              objectStores.push({
+                name: storeName,
+                keyPath: store.keyPath,
+                autoIncrement: store.autoIncrement,
+                records
+              });
+            } catch { /* skip unreadable stores */ }
+          }
+          db.close();
+          results.push({ name: dbInfo.name, version: dbInfo.version || 1, objectStores });
+        } catch { /* skip unreadable databases */ }
+      }
+      return results;
+    } catch { return []; }
+  })()
+`;
+
+async function handleExportState(cmd: Command, workspace: string): Promise<Result> {
+  const tabId = await resolveTabId(cmd.tabId, workspace);
+
+  try {
+    // 1. Get current tab info
+    const tab = await chrome.tabs.get(tabId);
+    const url = tab.url || '';
+    let domain = '';
+    try { domain = new URL(url).hostname; } catch {}
+
+    // 2. Read cookies
+    const cookieQuery: chrome.cookies.GetAllDetails = {};
+    if (cmd.domain) cookieQuery.domain = cmd.domain;
+    else if (url) cookieQuery.url = url;
+    const rawCookies = await chrome.cookies.getAll(cookieQuery);
+    const cookies = rawCookies.map(c => ({
+      name: c.name, value: c.value, domain: c.domain, path: c.path,
+      secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expirationDate,
+    }));
+
+    // 3. Read localStorage
+    const localStorage = await executor.evaluate(tabId, readStorageJs('localStorage')) as Record<string, string> ?? {};
+
+    // 4. Read sessionStorage
+    const sessionStorage = await executor.evaluate(tabId, readStorageJs('sessionStorage')) as Record<string, string> ?? {};
+
+    // 5. Read IndexedDB
+    const indexedDB = await executor.evaluate(tabId, READ_INDEXEDDB_JS) ?? [];
+
+    return {
+      id: cmd.id, ok: true,
+      data: { version: 1, url, domain: cmd.domain || domain, timestamp: Date.now(),
+              cookies, localStorage, sessionStorage, indexedDB },
+    };
+  } catch (err) {
+    return { id: cmd.id, ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function handleImportState(cmd: Command, workspace: string): Promise<Result> {
+  if (!cmd.state) return { id: cmd.id, ok: false, error: 'Missing state data' };
+  const { cookies, localStorage, sessionStorage, indexedDB, url } = cmd.state;
+  const errors: string[] = [];
+
+  // 1. Navigate to target URL (required for same-origin storage access)
+  if (url) {
+    const tabId = await resolveTabId(cmd.tabId, workspace);
+    await chrome.tabs.update(tabId, { url });
+    await new Promise<void>((resolve) => {
+      const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+        if (id === tabId && info.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
+    });
+  }
+
+  // 2. Import cookies
+  if (cookies?.length) {
+    for (const c of cookies) {
+      try {
+        await chrome.cookies.set({
+          url: c.url || `http${c.secure ? 's' : ''}://${c.domain.replace(/^\\./, '')}${c.path || '/'}`,
+          name: c.name, value: c.value, domain: c.domain, path: c.path || '/',
+          secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expirationDate,
+        });
+      } catch (e) { errors.push(`Cookie ${c.name}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+  }
+
+  // 3. Import localStorage / sessionStorage via CDP
+  const tabId = await resolveTabId(cmd.tabId, workspace);
+  for (const [type, data] of [['localStorage', localStorage], ['sessionStorage', sessionStorage]] as const) {
+    if (data && Object.keys(data).length > 0) {
+      try {
+        const entries = JSON.stringify(data);
+        await executor.evaluate(tabId, `(() => { const e = ${entries}; for (const [k,v] of Object.entries(e)) window.${type}.setItem(k,v); return Object.keys(e).length; })()`);
+      } catch (e) { errors.push(`${type}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+  }
+
+  // 4. Import IndexedDB
+  if (indexedDB?.length) {
+    const idbData = JSON.stringify(indexedDB);
+    try {
+      await executor.evaluate(tabId, `
+        (async () => {
+          const dbs = ${idbData};
+          for (const dbInfo of dbs) {
+            const db = await new Promise((resolve, reject) => {
+              const req = window.indexedDB.open(dbInfo.name, dbInfo.version);
+              req.onupgradeneeded = () => {
+                const d = req.result;
+                for (const s of dbInfo.objectStores) {
+                  if (!d.objectStoreNames.contains(s.name)) {
+                    d.createObjectStore(s.name, { keyPath: s.keyPath || undefined, autoIncrement: s.autoIncrement });
+                  }
+                }
+              };
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => reject(req.error);
+            });
+            for (const s of dbInfo.objectStores) {
+              if (!db.objectStoreNames.contains(s.name)) continue;
+              const tx = db.transaction(s.name, 'readwrite');
+              const os = tx.objectStore(s.name);
+              for (const r of s.records) os.put(r.value, s.keyPath ? undefined : r.key);
+              await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+            }
+            db.close();
+          }
+          return { ok: true };
+        })()
+      `);
+    } catch (e) { errors.push(`IndexedDB: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+
+  return { id: cmd.id, ok: true, data: { imported: true, ...(errors.length ? { errors } : {}) } };
 }
 
 export const __test__ = {

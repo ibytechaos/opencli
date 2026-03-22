@@ -30,6 +30,8 @@ function createMockPage(overrides: Partial<IPage> = {}): IPage {
     installInterceptor: vi.fn(),
     getInterceptedRequests: vi.fn().mockResolvedValue([]),
     screenshot: vi.fn().mockResolvedValue(''),
+    exportState: vi.fn().mockResolvedValue({}),
+    importState: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

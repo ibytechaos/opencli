@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.7](https://github.com/jackwener/opencli/compare/v1.2.6...v1.2.7) (2026-03-22)
+
+
+### Bug Fixes
+
+* **daemon:** harden security against browser CSRF attacks ([#268](https://github.com/jackwener/opencli/issues/268)) ([#270](https://github.com/jackwener/opencli/issues/270)) ([40bd11d](https://github.com/jackwener/opencli/commit/40bd11dfbe09ce8996e01da9da8dab915d5e4474))
+* remove duplicate horizontal rules and extra blank lines in READMEs ([#266](https://github.com/jackwener/opencli/issues/266)) ([e4a13cb](https://github.com/jackwener/opencli/commit/e4a13cb6f051faa7a5c766a0319c3eb9eef80793))
+* update doctor tests for auto-start daemon and --no-live default ([#265](https://github.com/jackwener/opencli/issues/265)) ([637161f](https://github.com/jackwener/opencli/commit/637161f0abde2a5ab2173828642377e7a6fddef4))
+
+
+### Performance Improvements
+
+* smart page settle via DOM stability detection ([#271](https://github.com/jackwener/opencli/issues/271)) ([4b976da](https://github.com/jackwener/opencli/commit/4b976da04f47d85de9f303268d854c9e7a96e630))
+
 ## [1.1.0](https://github.com/jackwener/opencli/compare/v1.0.6...v1.1.0) (2026-03-20)
 
 

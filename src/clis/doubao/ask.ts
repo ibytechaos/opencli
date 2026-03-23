@@ -1,5 +1,4 @@
 import { cli, Strategy } from '../../registry.js';
-import type { IPage } from '../../types.js';
 import { DOUBAO_DOMAIN, getDoubaoTranscriptLines, getDoubaoVisibleTurns, sendDoubaoMessage, waitForDoubaoResponse } from './common.js';
 
 export const askCommand = cli({
@@ -16,7 +15,7 @@ export const askCommand = cli({
     { name: 'timeout', required: false, help: 'Max seconds to wait (default: 60)', default: '60' },
   ],
   columns: ['Role', 'Text'],
-  func: async (page: IPage, kwargs: any) => {
+  func: async (page, kwargs) => {
     const text = kwargs.text as string;
     const timeout = parseInt(kwargs.timeout as string, 10) || 60;
     const beforeTurns = await getDoubaoVisibleTurns(page);

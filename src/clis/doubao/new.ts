@@ -1,6 +1,5 @@
 import { cli, Strategy } from '../../registry.js';
-import type { IPage } from '../../types.js';
-import { DOUBAO_DOMAIN, DOUBAO_CHAT_URL, startNewDoubaoChat } from './common.js';
+import { DOUBAO_DOMAIN, startNewDoubaoChat } from './common.js';
 
 export const newCommand = cli({
   site: 'doubao',
@@ -12,7 +11,7 @@ export const newCommand = cli({
   navigateBefore: false,
   args: [],
   columns: ['Status', 'Action'],
-  func: async (page: IPage) => {
+  func: async (page) => {
     const action = await startNewDoubaoChat(page);
     return [{
       Status: 'Success',

@@ -1,5 +1,4 @@
 import { cli, Strategy } from '../../registry.js';
-import type { IPage } from '../../types.js';
 import { DOUBAO_DOMAIN, getDoubaoVisibleTurns } from './common.js';
 
 export const readCommand = cli({
@@ -12,7 +11,7 @@ export const readCommand = cli({
   navigateBefore: false,
   args: [],
   columns: ['Role', 'Text'],
-  func: async (page: IPage) => {
+  func: async (page) => {
     const turns = await getDoubaoVisibleTurns(page);
     if (turns.length > 0) return turns;
     return [{ Role: 'System', Text: 'No visible Doubao messages were found.' }];

@@ -1,6 +1,5 @@
 import { cli, Strategy } from '../../registry.js';
-import type { IPage } from '../../types.js';
-import { DOUBAO_DOMAIN, DOUBAO_CHAT_URL, sendDoubaoMessage } from './common.js';
+import { DOUBAO_DOMAIN, sendDoubaoMessage } from './common.js';
 
 export const sendCommand = cli({
   site: 'doubao',
@@ -12,7 +11,7 @@ export const sendCommand = cli({
   navigateBefore: false,
   args: [{ name: 'text', required: true, positional: true, help: 'Message to send' }],
   columns: ['Status', 'SubmittedBy', 'InjectedText'],
-  func: async (page: IPage, kwargs: any) => {
+  func: async (page, kwargs) => {
     const text = kwargs.text as string;
     const submittedBy = await sendDoubaoMessage(page, text);
 

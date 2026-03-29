@@ -10,7 +10,7 @@
  *   --mode raw: every caption segment as-is with precise timestamps
  */
 import { cli, Strategy } from '../../registry.js';
-import { parseVideoId } from './utils.js';
+import { parseVideoId, quietWatchPlayback } from './utils.js';
 import {
   groupTranscriptSegments,
   formatGroupedTranscript,
@@ -36,6 +36,7 @@ cli({
     const videoId = parseVideoId(kwargs.url);
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     await page.goto(videoUrl);
+    await quietWatchPlayback(page);
     await page.wait(3);
 
     const lang = kwargs.lang || '';

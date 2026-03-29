@@ -2,7 +2,7 @@
  * YouTube video metadata — read ytInitialPlayerResponse + ytInitialData from video page.
  */
 import { cli, Strategy } from '../../registry.js';
-import { parseVideoId } from './utils.js';
+import { parseVideoId, quietWatchPlayback } from './utils.js';
 import { CommandExecutionError } from '../../errors.js';
 
 cli({
@@ -19,6 +19,7 @@ cli({
     const videoId = parseVideoId(kwargs.url);
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     await page.goto(videoUrl);
+    await quietWatchPlayback(page);
     await page.wait(3);
 
     const data = await page.evaluate(`

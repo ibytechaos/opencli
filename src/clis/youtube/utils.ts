@@ -1,6 +1,7 @@
 /**
  * Shared YouTube utilities — URL parsing, video ID extraction, etc.
  */
+import type { IPage } from '../../types.js';
 
 /**
  * Extract a YouTube video ID from a URL or bare video ID string.
@@ -25,4 +26,34 @@ export function parseVideoId(input: string): string {
   }
 
   return input;
+}
+
+export function buildQuietPlaybackJs(): string {
+  return `
+    (async () => {
+      try {
+        const player = window.movie_player;
+        if (player?.mute) player.mute();
+        if (player?.pauseVideo) player.pauseVideo();
+      } catch {}
+
+      try {
+        const media = document.querySelector('video');
+        if (media) {
+          media.muted = true;
+          media.pause();
+        }
+      } catch {}
+
+      return true;
+    })()
+  `;
+}
+
+export async function quietWatchPlayback(page: IPage): Promise<void> {
+  try {
+    await page.evaluate(buildQuietPlaybackJs());
+  } catch {
+    // Best-effort only — metadata/transcript extraction should continue.
+  }
 }

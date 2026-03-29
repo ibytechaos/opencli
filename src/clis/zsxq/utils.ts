@@ -1,4 +1,4 @@
-import { AuthRequiredError, CliError } from '../../errors.js';
+import { ArgumentError, AuthRequiredError, CliError } from '../../errors.js';
 import type { IPage } from '../../types.js';
 
 export interface ZsxqUser {
@@ -147,11 +147,9 @@ export async function getCookieValue(page: IPage, name: string): Promise<string 
   return cookies.find(cookie => cookie.name === name)?.value;
 }
 
-export async function getDefaultGroupId(page: IPage): Promise<string> {
-  // Try localStorage first, then fall back to first joined group
+export async function getActiveGroupId(page: IPage): Promise<string> {
   const groupId = await page.evaluate(`
     (() => {
-      // Check localStorage
       const target = localStorage.getItem('target_group');
       if (target) {
         try {
@@ -164,40 +162,10 @@ export async function getDefaultGroupId(page: IPage): Promise<string> {
   `);
   if (groupId) return groupId;
 
-  // Fall back: call API to get first group
-  const raw = await page.evaluate(`
-    (async () => {
-      try {
-        const r = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('GET', 'https://api.zsxq.com/v2/groups', true);
-          xhr.withCredentials = true;
-          xhr.setRequestHeader('accept', 'application/json');
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try { resolve(JSON.parse(xhr.responseText)); }
-              catch { resolve(null); }
-            } else { resolve(null); }
-          };
-          xhr.onerror = () => resolve(null);
-          xhr.send();
-        });
-        if (r && r.resp_data && r.resp_data.groups && r.resp_data.groups.length > 0) {
-          return String(r.resp_data.groups[0].group_id);
-        }
-        return null;
-      } catch { return null; }
-    })()
-  `);
-
-  if (!raw) {
-    throw new CliError(
-      'AUTH_REQUIRED',
-      'Cannot determine group_id',
-      'Open a specific 知识星球 page in Chrome first',
-    );
-  }
-  return raw;
+  throw new ArgumentError(
+    'Cannot determine active group_id',
+    'Pass --group_id <id> or open the target 知识星球 page in Chrome first',
+  );
 }
 
 export async function browserJsonRequest(page: IPage, path: string): Promise<BrowserFetchResult> {

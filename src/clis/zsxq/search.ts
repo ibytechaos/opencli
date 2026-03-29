@@ -1,9 +1,9 @@
 import { cli, Strategy } from '../../registry.js';
 import {
+  getActiveGroupId,
   ensureZsxqAuth,
   ensureZsxqPage,
   fetchFirstJson,
-  getDefaultGroupId,
   getGroupsFromResponse,
   getTopicsFromResponse,
   toTopicRow,
@@ -19,7 +19,7 @@ cli({
   args: [
     { name: 'keyword', required: true, positional: true, help: 'Search keyword' },
     { name: 'limit', type: 'int', default: 20, help: 'Number of results to return' },
-    { name: 'group_id', help: 'Optional group id; defaults to group_id cookie' },
+    { name: 'group_id', help: 'Optional group id; defaults to the active group in Chrome' },
   ],
   columns: ['topic_id', 'group', 'author', 'title', 'comments', 'likes', 'time', 'url'],
   func: async (page, kwargs) => {
@@ -28,7 +28,7 @@ cli({
 
     const keyword = String(kwargs.keyword || '').trim();
     const limit = Math.max(1, Number(kwargs.limit) || 20);
-    const groupId = String(kwargs.group_id || await getDefaultGroupId(page));
+    const groupId = String(kwargs.group_id || await getActiveGroupId(page));
     const query = encodeURIComponent(keyword);
 
     // Resolve group name from groups API

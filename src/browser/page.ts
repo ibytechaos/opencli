@@ -129,18 +129,6 @@ export class Page extends BasePage {
     return Array.isArray(result) ? result : [];
   }
 
-  async closeTab(index?: number): Promise<void> {
-    await sendCommand('tabs', { op: 'close', ...this._wsOpt(), ...(index !== undefined ? { index } : {}) });
-    // Invalidate cached tabId — the closed tab might have been our active one.
-    // We can't know for sure (close-by-index doesn't return tabId), so reset.
-    this._tabId = undefined;
-  }
-
-  async newTab(): Promise<void> {
-    const result = await sendCommand('tabs', { op: 'new', ...this._wsOpt() }) as { tabId?: number };
-    if (result?.tabId) this._tabId = result.tabId;
-  }
-
   async selectTab(index: number): Promise<void> {
     const result = await sendCommand('tabs', { op: 'select', index, ...this._wsOpt() }) as { selected?: number };
     if (result?.selected) this._tabId = result.selected;
@@ -179,6 +167,125 @@ export class Page extends BasePage {
       throw new Error('setFileInput returned no count — command may not be supported by the extension');
     }
   }
+
+  async cdp(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    return sendCommand('cdp', {
+      cdpMethod: method,
+      cdpParams: params,
+      ...this._cmdOpts(),
+    });
+  }
+
+  /** CDP native click fallback — called when JS el.click() fails */
+  protected override async tryNativeClick(x: number, y: number): Promise<boolean> {
+    try {
+      await this.nativeClick(x, y);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Precise click using DOM.getContentQuads/getBoxModel for inline elements */
+  async clickWithQuads(ref: string): Promise<void> {
+    const safeRef = JSON.stringify(ref);
+    const cssSelector = `[data-opencli-ref="${ref.replace(/"/g, '\\"')}"]`;
+
+    // Scroll element into view first
+    await this.evaluate(`
+      (() => {
+        const el = document.querySelector('[data-opencli-ref="' + ${safeRef} + '"]');
+        if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
+        return !!el;
+      })()
+    `);
+
+    try {
+      // Find DOM node via CDP
+      const doc = await this.cdp('DOM.getDocument', {}) as { root: { nodeId: number } };
+      const result = await this.cdp('DOM.querySelectorAll', {
+        nodeId: doc.root.nodeId,
+        selector: cssSelector,
+      }) as { nodeIds: number[] };
+
+      if (!result.nodeIds?.length) throw new Error('DOM node not found');
+
+      const nodeId = result.nodeIds[0];
+
+      // Try getContentQuads first (precise for inline elements)
+      try {
+        const quads = await this.cdp('DOM.getContentQuads', { nodeId }) as { quads: number[][] };
+        if (quads.quads?.length) {
+          const q = quads.quads[0];
+          const cx = (q[0] + q[2] + q[4] + q[6]) / 4;
+          const cy = (q[1] + q[3] + q[5] + q[7]) / 4;
+          await this.nativeClick(Math.round(cx), Math.round(cy));
+          return;
+        }
+      } catch { /* fallthrough */ }
+
+      // Try getBoxModel
+      try {
+        const box = await this.cdp('DOM.getBoxModel', { nodeId }) as { model: { content: number[] } };
+        if (box.model?.content) {
+          const c = box.model.content;
+          const cx = (c[0] + c[2] + c[4] + c[6]) / 4;
+          const cy = (c[1] + c[3] + c[5] + c[7]) / 4;
+          await this.nativeClick(Math.round(cx), Math.round(cy));
+          return;
+        }
+      } catch { /* fallthrough */ }
+    } catch { /* fallthrough */ }
+
+    // Final fallback: regular click
+    await this.evaluate(`
+      (() => {
+        const el = document.querySelector('[data-opencli-ref="' + ${safeRef} + '"]');
+        if (!el) throw new Error('Element not found: ' + ${safeRef});
+        el.click();
+        return 'clicked';
+      })()
+    `);
+  }
+
+  async nativeClick(x: number, y: number): Promise<void> {
+    await this.cdp('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x, y,
+      button: 'left',
+      clickCount: 1,
+    });
+    await this.cdp('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x, y,
+      button: 'left',
+      clickCount: 1,
+    });
+  }
+
+  async nativeType(text: string): Promise<void> {
+    // Use Input.insertText for reliable Unicode/CJK text insertion
+    await this.cdp('Input.insertText', { text });
+  }
+
+  async nativeKeyPress(key: string, modifiers: string[] = []): Promise<void> {
+    let modifierFlags = 0;
+    for (const mod of modifiers) {
+      if (mod === 'Alt') modifierFlags |= 1;
+      if (mod === 'Ctrl') modifierFlags |= 2;
+      if (mod === 'Meta') modifierFlags |= 4;
+      if (mod === 'Shift') modifierFlags |= 8;
+    }
+    await this.cdp('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key,
+      modifiers: modifierFlags,
+    });
+    await this.cdp('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key,
+      modifiers: modifierFlags,
+    });
+  }
 }
 
-// (End of file)

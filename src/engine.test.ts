@@ -320,4 +320,56 @@ describe('executeCommand', () => {
     expect(spy).toHaveBeenCalledWith('chatwise');
     spy.mockRestore();
   });
+
+  it('threads app-specific cdpTargetFilter into the browser session for Electron apps', async () => {
+    const launcher = await import('./launcher.js');
+    const runtime = await import('./runtime.js');
+    const spyEndpoint = vi.spyOn(launcher, 'resolveElectronEndpoint')
+      .mockResolvedValue('http://127.0.0.1:9225');
+    const spySession = vi.spyOn(runtime, 'browserSession')
+      .mockImplementation(async (_factory: any, fn: any, opts: any) => fn({
+        goto: async () => {},
+        evaluate: async () => null,
+        getCookies: async () => [],
+        snapshot: async () => null,
+        click: async () => {},
+        typeText: async () => {},
+        pressKey: async () => {},
+        scrollTo: async () => null,
+        getFormState: async () => null,
+        wait: async () => {},
+        tabs: async () => [],
+        closeTab: async () => {},
+        newTab: async () => {},
+        selectTab: async () => {},
+        networkRequests: async () => [],
+        consoleMessages: async () => [],
+        scroll: async () => {},
+        autoScroll: async () => {},
+        installInterceptor: async () => {},
+        getInterceptedRequests: async () => [],
+        waitForCapture: async () => {},
+        screenshot: async () => '',
+      }));
+
+    const cmd = cli({
+      site: 'doubao-app',
+      name: 'status',
+      description: 'doubao status',
+      browser: true,
+      strategy: Strategy.UI,
+      func: async () => [{ ok: true }],
+    });
+
+    await expect(executeCommand(cmd, {})).resolves.toEqual([{ ok: true }]);
+    expect(spyEndpoint).toHaveBeenCalledWith('doubao-app');
+    expect(spySession).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), expect.objectContaining({
+      workspace: 'site:doubao-app',
+      cdpEndpoint: 'http://127.0.0.1:9225',
+      cdpTargetFilter: 'doubao-chat/chat',
+    }));
+
+    spySession.mockRestore();
+    spyEndpoint.mockRestore();
+  });
 });

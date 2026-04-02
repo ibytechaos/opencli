@@ -15,6 +15,12 @@ describe('electron-apps registry', () => {
     expect(app!.port).toBe(9222);
   });
 
+  it('stores targetFilter for apps that need a preferred CDP target', () => {
+    const app = getElectronApp('doubao-app');
+    expect(app).toBeDefined();
+    expect(app!.targetFilter).toBe('doubao-chat/chat');
+  });
+
   it('returns undefined for non-Electron sites', () => {
     expect(getElectronApp('bilibili')).toBeUndefined();
     expect(getElectronApp('hackernews')).toBeUndefined();

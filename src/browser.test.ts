@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { BrowserBridge, generateStealthJs } from './browser/index.js';
 import { extractTabEntries, diffTabIndexes, appendLimited } from './browser/tabs.js';
 import { withTimeoutMs } from './runtime.js';
@@ -7,6 +7,10 @@ import { isRetryableSettleError } from './browser/page.js';
 import * as daemonClient from './browser/daemon-client.js';
 
 describe('browser helpers', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('extracts tab entries from string snapshots', () => {
     const entries = extractTabEntries('Tab 0 https://example.com\nTab 1 Chrome Extension');
 
@@ -99,6 +103,46 @@ describe('browser helpers', () => {
     ]);
 
     expect(target?.webSocketDebuggerUrl).toBe('ws://127.0.0.1:9226/codex');
+  });
+
+  it('prefers an app-specific target filter over generic app-name scoring', () => {
+    const target = cdpTest.selectCDPTarget([
+      {
+        type: 'page',
+        title: 'doubao://doubao-background/index.html',
+        url: 'doubao://doubao-background/index.html',
+        webSocketDebuggerUrl: 'ws://127.0.0.1:9225/background',
+      },
+      {
+        type: 'page',
+        title: '豆包',
+        url: 'doubao://doubao-chat/chat',
+        webSocketDebuggerUrl: 'ws://127.0.0.1:9225/chat',
+      },
+    ], 'doubao-chat/chat');
+
+    expect(target?.webSocketDebuggerUrl).toBe('ws://127.0.0.1:9225/chat');
+  });
+
+  it('lets OPENCLI_CDP_TARGET override the app-specific filter when both are present', () => {
+    vi.stubEnv('OPENCLI_CDP_TARGET', 'background');
+
+    const target = cdpTest.selectCDPTarget([
+      {
+        type: 'page',
+        title: 'doubao://doubao-background/index.html',
+        url: 'doubao://doubao-background/index.html',
+        webSocketDebuggerUrl: 'ws://127.0.0.1:9225/background',
+      },
+      {
+        type: 'page',
+        title: '豆包',
+        url: 'doubao://doubao-chat/chat',
+        webSocketDebuggerUrl: 'ws://127.0.0.1:9225/chat',
+      },
+    ], 'doubao-chat/chat');
+
+    expect(target?.webSocketDebuggerUrl).toBe('ws://127.0.0.1:9225/background');
   });
 });
 

@@ -9,18 +9,26 @@
 import { cli, Strategy } from '../../registry.js';
 import { AuthRequiredError } from '../../errors.js';
 
-/** Wait for search results or login wall using MutationObserver (max 5s). */
+/**
+ * Wait for search results or login wall using MutationObserver (max 5s).
+ * Returns 'content' if note items appeared, 'login_wall' if login gate
+ * detected, or 'timeout' if neither appeared within the deadline.
+ */
 const WAIT_FOR_CONTENT_JS = `
   new Promise((resolve) => {
-    const check = () =>
-      document.querySelector('section.note-item') ||
-      /登录后查看搜索结果/.test(document.body?.innerText || '');
-    if (check()) return resolve(true);
+    const detect = () => {
+      if (document.querySelector('section.note-item')) return 'content';
+      if (/登录后查看搜索结果/.test(document.body?.innerText || '')) return 'login_wall';
+      return null;
+    };
+    const found = detect();
+    if (found) return resolve(found);
     const observer = new MutationObserver(() => {
-      if (check()) { observer.disconnect(); resolve(true); }
+      const result = detect();
+      if (result) { observer.disconnect(); resolve(result); }
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => { observer.disconnect(); resolve(false); }, 5000);
+    setTimeout(() => { observer.disconnect(); resolve('timeout'); }, 5000);
   })
 `;
 
@@ -61,13 +69,9 @@ cli({
     // Wait for search results to render (or login wall to appear).
     // Uses MutationObserver to resolve as soon as content appears,
     // instead of a fixed delay + blind retry.
-    await page.evaluate(WAIT_FOR_CONTENT_JS);
+    const waitResult = await page.evaluate(WAIT_FOR_CONTENT_JS);
 
-    // Login-wall detection
-    const loginCheck = await page.evaluate(`
-      (() => /登录后查看搜索结果/.test(document.body?.innerText || ''))()
-    `);
-    if (loginCheck) {
+    if (waitResult === 'login_wall') {
       throw new AuthRequiredError(
         'www.xiaohongshu.com',
         'Xiaohongshu search results are blocked behind a login wall',
@@ -79,8 +83,6 @@ cli({
 
     const payload = await page.evaluate(`
       (() => {
-        const loginWall = /登录后查看搜索结果/.test(document.body.innerText || '');
-
         const normalizeUrl = (href) => {
           if (!href) return '';
           if (href.startsWith('http://') || href.startsWith('https://')) return href;
@@ -124,20 +126,11 @@ cli({
           });
         });
 
-        return {
-          loginWall,
-          results,
-        };
+        return results;
       })()
     `);
 
-    if (!payload || typeof payload !== 'object') return [];
-
-    if ((payload as any).loginWall) {
-      throw new AuthRequiredError('www.xiaohongshu.com', 'Xiaohongshu search results are blocked behind a login wall');
-    }
-
-    const data: any[] = Array.isArray((payload as any).results) ? (payload as any).results : [];
+    const data: any[] = Array.isArray(payload) ? (payload as any[]) : [];
     return data
       .filter((item: any) => item.title)
       .slice(0, kwargs.limit)

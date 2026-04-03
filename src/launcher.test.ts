@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { detectProcess, discoverAppPath, launchDetachedApp, probeCDP } from './launcher.js';
+import type { ElectronAppEntry } from './electron-apps.js';
+import { detectProcess, discoverAppPath, launchDetachedApp, launchElectronApp, probeCDP, resolveExecutableCandidates } from './launcher.js';
 
 interface MockChildProcess {
   once: ReturnType<typeof vi.fn>;
@@ -89,6 +90,7 @@ describe('discoverAppPath', () => {
 describe('launchDetachedApp', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    cp.spawn.mockReset();
   });
 
   it('unrefs the process after spawn succeeds', async () => {
@@ -115,5 +117,65 @@ describe('launchDetachedApp', () => {
       .rejects
       .toThrow('Could not launch Antigravity');
     expect(child.unref).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveExecutableCandidates', () => {
+  it('prefers explicit executable candidates over processName', () => {
+    const app: ElectronAppEntry = {
+      port: 9234,
+      processName: 'Antigravity',
+      executableNames: ['Electron', 'Antigravity'],
+    };
+
+    expect(resolveExecutableCandidates('/Applications/Antigravity.app', app)).toEqual([
+      '/Applications/Antigravity.app/Contents/MacOS/Electron',
+      '/Applications/Antigravity.app/Contents/MacOS/Antigravity',
+    ]);
+  });
+});
+
+describe('launchElectronApp', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    cp.spawn.mockReset();
+  });
+
+  it('falls back to the next executable candidate when the first is missing', async () => {
+    const firstChild = createMockChildProcess();
+    const secondChild = createMockChildProcess();
+    const app: ElectronAppEntry = {
+      port: 9234,
+      processName: 'Antigravity',
+      executableNames: ['Electron', 'Antigravity'],
+    };
+
+    cp.spawn
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => firstChild.emit('error', Object.assign(new Error('missing binary'), { code: 'ENOENT' })));
+        return firstChild as unknown as ReturnType<typeof cp.spawn>;
+      })
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => secondChild.emit('spawn'));
+        return secondChild as unknown as ReturnType<typeof cp.spawn>;
+      });
+
+    await expect(
+      launchElectronApp('/Applications/Antigravity.app', app, ['--remote-debugging-port=9234'], 'Antigravity'),
+    ).resolves.toBeUndefined();
+
+    expect(cp.spawn).toHaveBeenNthCalledWith(
+      1,
+      '/Applications/Antigravity.app/Contents/MacOS/Electron',
+      ['--remote-debugging-port=9234'],
+      { detached: true, stdio: 'ignore' },
+    );
+    expect(cp.spawn).toHaveBeenNthCalledWith(
+      2,
+      '/Applications/Antigravity.app/Contents/MacOS/Antigravity',
+      ['--remote-debugging-port=9234'],
+      { detached: true, stdio: 'ignore' },
+    );
+    expect(secondChild.unref).toHaveBeenCalledTimes(1);
   });
 });

@@ -462,13 +462,11 @@ describe('instagram post registration', () => {
     vi.restoreAllMocks();
   });
 
-  it('registers the post command with single-image, multi-image, and mixed-media args', () => {
+  it('registers the post command with a required-value media arg', () => {
     const cmd = getRegistry().get('instagram/post');
     expect(cmd).toBeDefined();
     expect(cmd?.browser).toBe(true);
     expect(cmd?.timeoutSeconds).toBe(300);
-    expect(cmd?.args.some((arg) => arg.name === 'image' && !arg.required)).toBe(true);
-    expect(cmd?.args.some((arg) => arg.name === 'images' && !arg.required)).toBe(true);
     expect(cmd?.args.some((arg) => arg.name === 'media' && !arg.required && arg.valueRequired)).toBe(true);
     expect(cmd?.args.some((arg) => arg.name === 'content' && !arg.required && arg.positional)).toBe(true);
   });
@@ -491,7 +489,7 @@ describe('instagram post registration', () => {
     });
     const cmd = getRegistry().get('instagram/post');
 
-    const result = await cmd!.func!(page, { image: imagePath, content: 'private default' });
+    const result = await cmd!.func!(page, { media: imagePath, content: 'private default' });
 
     expect(privateSpy).toHaveBeenCalledTimes(1);
     expect(page.setFileInput).not.toHaveBeenCalled();
@@ -527,7 +525,7 @@ describe('instagram post registration', () => {
     });
     const cmd = getRegistry().get('instagram/post');
 
-    const result = await cmd!.func!(page, { image: imagePath, content: 'private fallback' });
+    const result = await cmd!.func!(page, { media: imagePath, content: 'private fallback' });
 
     expect(privateSpy).toHaveBeenCalledTimes(1);
     expect(page.setFileInput).toHaveBeenCalledWith([imagePath], '[data-opencli-ig-upload-index="0"]');
@@ -617,35 +615,27 @@ describe('instagram post registration', () => {
     privateSpy.mockRestore();
   });
 
-  it('rejects passing both --image and --images together', async () => {
-    const imagePath = createTempImage('conflict-a.jpg');
-    const secondImagePath = createTempImage('conflict-b.jpg');
+  it('rejects missing --media before browser work', async () => {
     const page = createPageMock([]);
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
-      images: `${imagePath},${secondImagePath}`,
-      content: 'conflicting image args',
-    })).rejects.toThrow('Use either --image or --images, not both');
+      content: 'missing media',
+    })).rejects.toThrow('Argument "media" is required.');
   });
 
-  it('rejects passing --media together with --image or --images', async () => {
-    const imagePath = createTempImage('conflict-media-image.jpg');
-    const secondImagePath = createTempImage('conflict-media-second.jpg');
-    const videoPath = createTempVideo('conflict-media.mp4');
+  it('rejects empty or invalid --media inputs', async () => {
+    const imagePath = createTempImage('invalid-media-image.jpg');
     const page = createPageMock([]);
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      media: `${imagePath},${videoPath}`,
-      image: imagePath,
-    })).rejects.toThrow('Use either --media or --image/--images, not both');
+      media: '',
+    })).rejects.toThrow('Argument "media" is required.');
 
     await expect(cmd!.func!(page, {
-      media: `${imagePath},${videoPath}`,
-      images: `${imagePath},${secondImagePath}`,
-    })).rejects.toThrow('Use either --media or --image/--images, not both');
+      media: `${imagePath},/tmp/does-not-exist.mp4`,
+    })).rejects.toThrow('Media file not found');
   });
 
   it('uploads a single image, fills caption, and shares the post', async () => {
@@ -666,7 +656,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'hello from opencli',
     });
 
@@ -701,7 +691,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      images: `${firstImagePath},${secondImagePath}`,
+      media: `${firstImagePath},${secondImagePath}`,
       content: 'hello carousel',
     });
 
@@ -740,7 +730,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'capture enabled',
     });
 
@@ -785,7 +775,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      images: `${firstImagePath},${secondImagePath}`,
+      media: `${firstImagePath},${secondImagePath}`,
       content: 'hello delayed carousel',
     });
 
@@ -840,7 +830,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      images: `${firstImagePath},${secondImagePath}`,
+      media: `${firstImagePath},${secondImagePath}`,
       content: 'hello recovered carousel',
     });
 
@@ -871,7 +861,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
     });
 
     const evaluateCalls = (page.evaluate as any).mock.calls.map((args: any[]) => String(args[0]));
@@ -910,7 +900,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'legacy bridge fallback',
     });
 
@@ -949,7 +939,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'legacy large bridge fallback',
     });
 
@@ -970,7 +960,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'hello from opencli',
     })).rejects.toThrow(CommandExecutionError);
   });
@@ -983,7 +973,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'login required',
     })).rejects.toThrow(AuthRequiredError);
   });
@@ -1011,7 +1001,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'preview missing',
     })).rejects.toThrow('Instagram image preview did not appear after upload');
 
@@ -1029,7 +1019,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'upload should fail clearly',
     })).rejects.toThrow('Instagram image upload failed');
   });
@@ -1056,7 +1046,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'preview state wins over stale error text',
     });
 
@@ -1096,7 +1086,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'upload retry succeeds',
     });
 
@@ -1141,7 +1131,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'upload inline retry succeeds',
     });
 
@@ -1196,7 +1186,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      images: paths.join(','),
+      media: paths.join(','),
     });
 
     expect(setFileInput).toHaveBeenCalledTimes(5);
@@ -1252,7 +1242,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'fresh reload after upload failure',
     });
 
@@ -1297,7 +1287,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'share retry succeeds',
     });
 
@@ -1332,7 +1322,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'stale selector recovery',
     });
 
@@ -1368,7 +1358,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'stale node id recovery',
     });
 
@@ -1402,7 +1392,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'retry composer',
     });
 
@@ -1444,7 +1434,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'double next flow',
     });
 
@@ -1487,7 +1477,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'second input works',
     });
 
@@ -1521,7 +1511,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'share should fail',
     })).rejects.toThrow('Instagram post share failed');
   });
@@ -1545,7 +1535,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'slow share eventually succeeds',
     });
 
@@ -1580,7 +1570,7 @@ describe('instagram post registration', () => {
     const cmd = getRegistry().get('instagram/post');
 
     await expect(cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'share observation stalled',
     })).rejects.toThrow('Instagram post share confirmation did not appear');
 
@@ -1629,7 +1619,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'url recovery',
     });
 
@@ -1671,7 +1661,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'share settled recovery',
     });
 
@@ -1711,7 +1701,7 @@ describe('instagram post registration', () => {
 
     const cmd = getRegistry().get('instagram/post');
     const result = await cmd!.func!(page, {
-      image: imagePath,
+      media: imagePath,
       content: 'url recovery standard shape',
     });
 

@@ -117,59 +117,11 @@ function requirePage(page: IPage | null): IPage {
   return page;
 }
 
-function validateImagePaths(inputs: string[]): string[] {
+function validateMixedMediaItems(inputs: string[]): InstagramPostMediaItem[] {
   if (!inputs.length) {
     throw new ArgumentError(
-      'Argument "image" or "images" is required.',
-      'Provide --image /path/to/file.jpg or --images /path/a.jpg,/path/b.jpg',
-    );
-  }
-  if (inputs.length > MAX_MEDIA_ITEMS) {
-    throw new ArgumentError(`Too many images: ${inputs.length}`, `Instagram carousel posts support at most ${MAX_MEDIA_ITEMS} items`);
-  }
-
-  return inputs.map((input) => {
-    const resolved = path.resolve(String(input || '').trim());
-    if (!resolved) {
-      throw new ArgumentError('Image path cannot be empty');
-    }
-    if (!fs.existsSync(resolved)) {
-      throw new ArgumentError(`Image file not found: ${resolved}`);
-    }
-
-    const ext = path.extname(resolved).toLowerCase();
-    if (!SUPPORTED_IMAGE_EXTENSIONS.has(ext)) {
-      throw new ArgumentError(`Unsupported image format: ${ext}`, 'Supported formats: .jpg, .jpeg, .png, .webp');
-    }
-
-    return resolved;
-  });
-}
-
-function normalizeImagePaths(kwargs: Record<string, unknown>): string[] {
-  const image = String(kwargs.image ?? '').trim();
-  const images = String(kwargs.images ?? '').trim();
-
-  if (image && images) {
-    throw new ArgumentError('Use either --image or --images, not both');
-  }
-
-  if (images) {
-    return validateImagePaths(images.split(',').map((part) => part.trim()).filter(Boolean));
-  }
-
-  if (image) {
-    return validateImagePaths([image]);
-  }
-
-  return validateImagePaths([]);
-}
-
-function validateMixedMediaItems(inputs: string[]): InstagramPostMediaItem[] {
-  if (inputs.length < 2) {
-    throw new ArgumentError(
-      'Argument "media" requires at least two items.',
-      'Provide --media /path/to/image.jpg,/path/to/video.mp4',
+      'Argument "media" is required.',
+      'Provide --media /path/to/file.jpg or --media /path/a.jpg,/path/b.mp4',
     );
   }
   if (inputs.length > MAX_MEDIA_ITEMS) {
@@ -194,39 +146,20 @@ function validateMixedMediaItems(inputs: string[]): InstagramPostMediaItem[] {
     throw new ArgumentError(`Unsupported media format: ${ext}`, 'Supported formats: images (.jpg, .jpeg, .png, .webp) and videos (.mp4)');
   });
 
-  if (!items.some((item) => item.type === 'image') || !items.some((item) => item.type === 'video')) {
-    throw new ArgumentError(
-      'Argument "media" must include at least one image and one video.',
-      'Use --image/--images for image-only posts, or mix image and .mp4 files in --media',
-    );
-  }
-
   return items;
 }
 
 function normalizePostMediaItems(kwargs: Record<string, unknown>): InstagramPostMediaItem[] {
   const media = String(kwargs.media ?? '').trim();
-  const hasLegacyImageArgs = String(kwargs.image ?? '').trim() || String(kwargs.images ?? '').trim();
-
-  if (media && hasLegacyImageArgs) {
-    throw new ArgumentError('Use either --media or --image/--images, not both');
-  }
-
-  if (media) {
-    return validateMixedMediaItems(media.split(',').map((part) => part.trim()).filter(Boolean));
-  }
-
-  return normalizeImagePaths(kwargs).map((filePath) => ({ type: 'image' as const, filePath }));
+  return validateMixedMediaItems(media.split(',').map((part) => part.trim()).filter(Boolean));
 }
 
 function validateInstagramPostArgs(kwargs: Record<string, unknown>): void {
-  const image = kwargs.image;
-  const images = kwargs.images;
   const media = kwargs.media;
-  if (image === undefined && images === undefined && media === undefined) {
+  if (media === undefined) {
     throw new ArgumentError(
-      'Argument "image", "images", or "media" is required.',
-      'Provide --image /path/to/file.jpg, --images /path/a.jpg,/path/b.jpg, or --media /path/a.jpg,/path/b.mp4',
+      'Argument "media" is required.',
+      'Provide --media /path/to/file.jpg or --media /path/a.jpg,/path/b.mp4',
     );
   }
 }
@@ -1600,9 +1533,7 @@ cli({
   browser: true,
   timeoutSeconds: 300,
   args: [
-    { name: 'image', required: false, valueRequired: true, help: 'Path to a single image file' },
-    { name: 'images', required: false, valueRequired: true, help: `Comma-separated image paths (up to ${MAX_MEDIA_ITEMS})` },
-    { name: 'media', required: false, valueRequired: true, help: `Comma-separated mixed image/video paths (up to ${MAX_MEDIA_ITEMS})` },
+    { name: 'media', required: false, valueRequired: true, help: `Comma-separated media paths (images/videos, up to ${MAX_MEDIA_ITEMS})` },
     { name: 'content', positional: true, required: false, help: 'Caption text' },
   ],
   columns: ['status', 'detail', 'url'],

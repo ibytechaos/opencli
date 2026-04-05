@@ -182,12 +182,17 @@ const MAX_CAPTURE_ENTRIES = 200;
 /** Maximum response body preview size. */
 const MAX_RESPONSE_PREVIEW = 10_000;
 
+/** Maximum console messages to buffer. */
+const MAX_CONSOLE_MESSAGES = 100;
+
 class CDPPage extends BasePage {
   private _pageEnabled = false;
   private _captureEntries: NetworkCaptureEntry[] = [];
   private _captureActive = false;
   private _captureRequestMap = new Map<string, { index: number; method: string; url: string; headers: Record<string, string>; timestamp: number }>();
   private _captureHandlers: Array<{ event: string; handler: (params: unknown) => void }> = [];
+  private _consoleMessages: Array<{ level: string; text: string }> = [];
+  private _consoleListening = false;
 
   constructor(private bridge: CDPBridge) {
     super();
@@ -298,6 +303,51 @@ class CDPPage extends BasePage {
     this._captureEntries = [];
     this._captureRequestMap.clear();
     return entries;
+  }
+
+  // ── Console message capture ────────────────────────────────────────────
+
+  private async ensureConsoleCapture(): Promise<void> {
+    if (this._consoleListening) return;
+    this._consoleListening = true;
+
+    await this.bridge.send('Runtime.enable').catch(() => {});
+
+    this.bridge.on('Runtime.consoleAPICalled', (params: unknown) => {
+      const p = params as Record<string, unknown>;
+      const type = String(p.type ?? 'log');
+      const args = Array.isArray(p.args) ? p.args : [];
+      const text = args
+        .map((a: Record<string, unknown>) => {
+          if (typeof a.value === 'string') return a.value;
+          if (a.description) return String(a.description);
+          if (a.value !== undefined) return String(a.value);
+          return a.type === 'undefined' ? 'undefined' : '[object]';
+        })
+        .join(' ');
+      if (this._consoleMessages.length < MAX_CONSOLE_MESSAGES) {
+        this._consoleMessages.push({ level: type, text });
+      }
+    });
+
+    this.bridge.on('Runtime.exceptionThrown', (params: unknown) => {
+      const p = params as Record<string, unknown>;
+      const detail = p.exceptionDetails as Record<string, unknown> | undefined;
+      const text = detail?.text
+        ?? (detail?.exception as Record<string, unknown> | undefined)?.description
+        ?? 'Unknown exception';
+      if (this._consoleMessages.length < MAX_CONSOLE_MESSAGES) {
+        this._consoleMessages.push({ level: 'error', text: String(text) });
+      }
+    });
+  }
+
+  override async consoleMessages(level: string = 'info'): Promise<unknown[]> {
+    await this.ensureConsoleCapture();
+    if (level === 'error') {
+      return this._consoleMessages.filter(m => m.level === 'error' || m.level === 'warning');
+    }
+    return [...this._consoleMessages];
   }
 
   async goto(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void> {

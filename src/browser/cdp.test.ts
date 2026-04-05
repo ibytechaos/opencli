@@ -184,6 +184,33 @@ describe('CDPPage network capture', () => {
     expect(networkEnableCalls.length).toBe(1);
   });
 
+  it('captures multiple requests in order', async () => {
+    const page = await bridge.connect();
+    await page.startNetworkCapture!();
+
+    const requestHandler = (bridge as any)._eventListeners.get('Network.requestWillBeSent');
+    const responseHandler = (bridge as any)._eventListeners.get('Network.responseReceived');
+
+    // Two requests
+    for (const fn of requestHandler) {
+      fn({ requestId: 'r1', request: { url: 'https://api.com/a', method: 'GET', headers: {} }, wallTime: 1 });
+      fn({ requestId: 'r2', request: { url: 'https://api.com/b', method: 'POST', headers: {} }, wallTime: 2 });
+    }
+    for (const fn of responseHandler) {
+      fn({ requestId: 'r1', response: { status: 200, mimeType: 'text/html', headers: {} } });
+      fn({ requestId: 'r2', response: { status: 404, mimeType: 'application/json', headers: {} } });
+    }
+
+    const entries = await page.readNetworkCapture!() as NetworkCaptureEntry[];
+    expect(entries.length).toBe(2);
+    expect(entries[0].url).toBe('https://api.com/a');
+    expect(entries[0].method).toBe('GET');
+    expect(entries[0].status).toBe(200);
+    expect(entries[1].url).toBe('https://api.com/b');
+    expect(entries[1].method).toBe('POST');
+    expect(entries[1].status).toBe(404);
+  });
+
   it('skips response body for non-textual content types', async () => {
     const page = await bridge.connect();
 
@@ -219,5 +246,69 @@ describe('CDPPage network capture', () => {
     const entries = await page.readNetworkCapture!() as NetworkCaptureEntry[];
     expect(entries.length).toBe(1);
     expect(entries[0].responseBody).toBeUndefined();
+  });
+});
+
+describe('CDPPage console messages', () => {
+  let bridge: CDPBridge;
+
+  beforeEach(async () => {
+    vi.stubEnv('OPENCLI_CDP_ENDPOINT', 'ws://127.0.0.1:9222/devtools/page/1');
+    bridge = new CDPBridge();
+    vi.spyOn(bridge, 'send').mockResolvedValue({});
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await bridge.close();
+  });
+
+  it('captures console.log and console.error via CDP events', async () => {
+    const page = await bridge.connect();
+
+    // First call to consoleMessages enables Runtime domain and registers listeners
+    await page.consoleMessages();
+
+    // Simulate console events
+    const consoleHandler = (bridge as any)._eventListeners.get('Runtime.consoleAPICalled');
+    expect(consoleHandler).toBeDefined();
+
+    for (const fn of consoleHandler) {
+      fn({ type: 'log', args: [{ type: 'string', value: 'hello world' }] });
+      fn({ type: 'error', args: [{ type: 'string', value: 'something broke' }] });
+      fn({ type: 'warning', args: [{ type: 'string', value: 'watch out' }] });
+    }
+
+    // All messages
+    const all = await page.consoleMessages('info') as Array<{ level: string; text: string }>;
+    expect(all.length).toBe(3);
+    expect(all[0]).toEqual({ level: 'log', text: 'hello world' });
+    expect(all[1]).toEqual({ level: 'error', text: 'something broke' });
+
+    // Error-level filter
+    const errors = await page.consoleMessages('error') as Array<{ level: string; text: string }>;
+    expect(errors.length).toBe(2); // error + warning
+    expect(errors.map(e => e.level)).toEqual(['error', 'warning']);
+  });
+
+  it('captures uncaught exceptions via Runtime.exceptionThrown', async () => {
+    const page = await bridge.connect();
+    await page.consoleMessages();
+
+    const exceptionHandler = (bridge as any)._eventListeners.get('Runtime.exceptionThrown');
+    for (const fn of exceptionHandler) {
+      fn({ exceptionDetails: { exception: { description: 'TypeError: x is not a function' } } });
+    }
+
+    const errors = await page.consoleMessages('error') as Array<{ level: string; text: string }>;
+    expect(errors.length).toBe(1);
+    expect(errors[0].text).toBe('TypeError: x is not a function');
+    expect(errors[0].level).toBe('error');
+  });
+
+  it('returns empty array before any console events', async () => {
+    const page = await bridge.connect();
+    const msgs = await page.consoleMessages('error');
+    expect(msgs).toEqual([]);
   });
 });

@@ -214,6 +214,22 @@ export function isDiagnosticEnabled(): boolean {
   return process.env.OPENCLI_DIAGNOSTIC === '1';
 }
 
+/**
+ * Read network requests from the best available source.
+ * Priority: session-level capture (rich data) → performance API (fallback).
+ */
+async function readNetworkData(page: IPage): Promise<unknown[]> {
+  // Prefer session-level passive capture (has method/status/headers/body)
+  if (typeof page.readNetworkCapture === 'function') {
+    try {
+      const captured = await page.readNetworkCapture();
+      if (Array.isArray(captured) && captured.length > 0) return captured;
+    } catch { /* fallback */ }
+  }
+  // Fallback: performance API (URL + timing only)
+  return page.networkRequests().catch(() => []);
+}
+
 /** Safely collect page diagnostic state with redaction, size caps, and timeout. */
 async function collectPageState(page: IPage): Promise<RepairContext['page'] | undefined> {
   const collect = async (): Promise<RepairContext['page'] | undefined> => {
@@ -221,7 +237,7 @@ async function collectPageState(page: IPage): Promise<RepairContext['page'] | un
       const [url, snapshot, networkRequests, consoleErrors] = await Promise.all([
         page.getCurrentUrl?.().catch(() => null) ?? Promise.resolve(null),
         page.snapshot().catch(() => '(snapshot unavailable)'),
-        page.networkRequests().catch(() => []),
+        readNetworkData(page),
         page.consoleMessages('error').catch(() => []),
       ]);
 

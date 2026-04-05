@@ -1,6 +1,6 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import type { IPage } from '@jackwener/opencli/types';
-import TurndownService from 'turndown';
+import { TurndownService } from '@jackwener/opencli/utils';
 import { CommandExecutionError, TimeoutError } from '@jackwener/opencli/errors';
 import { YUANBAO_DOMAIN, YUANBAO_URL, IS_VISIBLE_JS, authRequired, isOnYuanbao, ensureYuanbaoPage, hasLoginGate } from './shared.js';
 

@@ -14,14 +14,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const CLIS_DIR = path.join(ROOT, 'clis');
 
-/** Recursively collect all .ts files in a directory. */
-function collectTsFiles(dir: string): string[] {
+/** Recursively collect .ts files in a directory, optionally excluding test files. */
+function collectTsFiles(dir: string, opts?: { excludeTests?: boolean }): string[] {
   const results: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...collectTsFiles(full));
+      results.push(...collectTsFiles(full, opts));
     } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      if (opts?.excludeTests && entry.name.endsWith('.test.ts')) continue;
       results.push(full);
     }
   }
@@ -55,6 +56,36 @@ describe('adapter imports use package exports', () => {
           const match = content.match(pattern)?.[0];
           violations.push(`${rel}: ${match}`);
         }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
+
+describe('adapters do not import third-party packages directly', () => {
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+  const deps = Object.keys(pkgJson.dependencies ?? {});
+  // Build a pattern that matches: from 'chalk' / from "turndown" etc.
+  // Excludes node: builtins and relative/package imports.
+  const depPattern = new RegExp(
+    `(?:from|mock|importActual)\\s*\\(?['"](?:${deps.map(d => d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})['"]`,
+  );
+
+  // Only check non-test adapter files (test files run inside the package tree)
+  const nonTestFiles = collectTsFiles(CLIS_DIR, { excludeTests: true });
+
+  it('found non-test adapter files to check', () => {
+    expect(nonTestFiles.length).toBeGreaterThan(100);
+  });
+
+  it('no adapter directly imports opencli runtime dependencies', () => {
+    const violations: string[] = [];
+    for (const file of nonTestFiles) {
+      const content = fs.readFileSync(file, 'utf-8');
+      if (depPattern.test(content)) {
+        const rel = path.relative(ROOT, file);
+        const match = content.match(depPattern)?.[0];
+        violations.push(`${rel}: ${match}`);
       }
     }
     expect(violations).toEqual([]);

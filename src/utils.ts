@@ -1,9 +1,16 @@
 /**
  * Shared utility functions used across the codebase.
+ *
+ * Adapters should import from '@jackwener/opencli/utils' instead of
+ * depending on third-party packages directly, so they work correctly
+ * when loaded from ~/.opencli/clis/.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import TurndownService from 'turndown';
+
+export { TurndownService };
 
 /** Type guard: checks if a value is a non-null, non-array object. */
 export function isRecord(value: unknown): value is Record<string, unknown> {

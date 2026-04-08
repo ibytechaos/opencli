@@ -1,13 +1,22 @@
 # AI 默认源
 
-当用户没有明确指定网站时，先在 `grok`、`doubao`、`gemini` 中选择一个，不要一开始并行跑多个 AI 源。
+当用户没有明确指定网站时，**首选 `opencli gemini search-api`**（纯 API，无需浏览器），再按需补充其他源。
 
-## 使用规则
+## 首选：gemini search-api（无需浏览器）
 
-1. 先运行 `opencli list -f yaml`
-2. 确认 `grok`、`doubao`、`gemini` 哪些在当前 registry 中可用
-3. 运行 `opencli <site> -h`
-4. 锁定具体子命令后，再运行 `opencli <site> <command> -h`
+```bash
+opencli gemini search-api "<查询>"
+```
+
+- 纯 API 调用，使用 Google Search grounding
+- 无需 Chrome 浏览器和 extension
+- 需要 `GOOGLE_API_KEY` 环境变量
+- 中英文均可，返回答案 + 引用来源
+- **默认路由目标：任何通用搜索都应优先使用此命令**
+
+## 备选源（需要浏览器）
+
+以下源需要 Chrome + OpenCLI Browser Bridge extension：
 
 ## 路由建议
 

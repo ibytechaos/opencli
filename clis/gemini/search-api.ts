@@ -1,8 +1,8 @@
 /**
  * Google Search via Gemini API with grounding (no browser needed).
  *
- * API: POST /models/gemini-2.5-flash:generateContent
- * Uses googleSearch tool for grounded results with citations.
+ * Returns structured results: answer text + resolved source URLs.
+ * Redirect URLs are resolved to real destinations via HEAD requests.
  *
  * Usage:
  *   opencli gemini search-api "latest TypeScript features"
@@ -13,18 +13,32 @@ import { cli, Strategy } from '@jackwener/opencli/registry';
 import { CliError } from '@jackwener/opencli/errors';
 import { geminiApi } from './_shared/api.js';
 
+/** Resolve Google redirect URL to real URL via HEAD request */
+async function resolveRedirectUrl(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
 cli({
   site: 'gemini',
   name: 'search-api',
   description: 'Google Search via Gemini API (grounding, 无需浏览器)',
   strategy: Strategy.PUBLIC,
   browser: false,
-  defaultFormat: 'plain',
+  defaultFormat: 'yaml',
   args: [
     { name: 'query', positional: true, required: true, help: 'Search query (中英文均可)' },
     { name: 'model', default: 'gemini-2.5-flash', help: 'Model to use' },
   ],
-  columns: ['answer'],
+  columns: ['answer', 'sources'],
   func: async (_page, kwargs) => {
     const query = kwargs.query as string;
     const model = kwargs.model as string;
@@ -40,23 +54,33 @@ cli({
     }
 
     // Extract text answer
-    const textParts: string[] = (candidate.content?.parts ?? [])
+    const answer = (candidate.content?.parts ?? [])
       .filter((p: any) => p.text)
-      .map((p: any) => p.text);
+      .map((p: any) => p.text)
+      .join('\n\n');
 
-    // Extract grounding sources
-    const groundingMeta = candidate.groundingMetadata;
-    const chunks: any[] = groundingMeta?.groundingChunks ?? [];
-    const sources = chunks
+    // Extract and resolve grounding sources
+    const rawChunks: any[] = candidate.groundingMetadata?.groundingChunks ?? [];
+    const rawCitations = rawChunks
       .filter((c: any) => c.web?.uri)
-      .map((c: any) => `- [${c.web?.title || c.web?.uri}](${c.web?.uri})`)
-      .join('\n');
+      .map((c: any) => ({ url: c.web!.uri!, title: c.web?.title || '' }));
 
-    const answer = textParts.join('\n\n');
-    const fullResponse = sources
-      ? `${answer}\n\n---\nSources:\n${sources}`
-      : answer;
+    // Resolve redirect URLs in batches of 5
+    const sources: Array<{ title: string; url: string }> = [];
+    for (let i = 0; i < rawCitations.length; i += 5) {
+      const batch = rawCitations.slice(i, i + 5);
+      const resolved = await Promise.all(
+        batch.map(async (c) => ({
+          title: c.title,
+          url: await resolveRedirectUrl(c.url),
+        })),
+      );
+      sources.push(...resolved);
+    }
 
-    return [{ answer: fullResponse }];
+    return [{
+      answer,
+      sources: sources.map((s) => `${s.title} ${s.url}`).join('\n'),
+    }];
   },
 });

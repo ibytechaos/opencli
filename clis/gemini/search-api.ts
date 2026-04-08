@@ -1,8 +1,11 @@
 /**
  * Google Search via Gemini API with grounding (no browser needed).
  *
- * Returns structured results: answer text + resolved source URLs.
- * Redirect URLs are resolved to real destinations via HEAD requests.
+ * Returns structured results optimized for agent consumption:
+ * - content: synthesized answer text
+ * - citations: array of {title, url} with resolved real URLs
+ *
+ * Output format follows OpenClaw's web_search payload convention.
  *
  * Usage:
  *   opencli gemini search-api "latest TypeScript features"
@@ -38,11 +41,12 @@ cli({
     { name: 'query', positional: true, required: true, help: 'Search query (中英文均可)' },
     { name: 'model', default: 'gemini-2.5-flash', help: 'Model to use' },
   ],
-  columns: ['answer', 'sources'],
+  columns: ['query', 'provider', 'content', 'citations'],
   func: async (_page, kwargs) => {
     const query = kwargs.query as string;
     const model = kwargs.model as string;
 
+    const start = Date.now();
     const data = await geminiApi('POST', `/models/${model}:generateContent`, {
       contents: [{ parts: [{ text: query }] }],
       tools: [{ google_search: {} }],
@@ -53,8 +57,8 @@ cli({
       throw new CliError('NO_RESULT', 'No results returned', 'Try a different query');
     }
 
-    // Extract text answer
-    const answer = (candidate.content?.parts ?? [])
+    // Extract answer text
+    const content = (candidate.content?.parts ?? [])
       .filter((p: any) => p.text)
       .map((p: any) => p.text)
       .join('\n\n');
@@ -66,7 +70,7 @@ cli({
       .map((c: any) => ({ url: c.web!.uri!, title: c.web?.title || '' }));
 
     // Resolve redirect URLs in batches of 5
-    const sources: Array<{ title: string; url: string }> = [];
+    const citations: Array<{ title: string; url: string }> = [];
     for (let i = 0; i < rawCitations.length; i += 5) {
       const batch = rawCitations.slice(i, i + 5);
       const resolved = await Promise.all(
@@ -75,12 +79,19 @@ cli({
           url: await resolveRedirectUrl(c.url),
         })),
       );
-      sources.push(...resolved);
+      citations.push(...resolved);
     }
 
+    const tookMs = Date.now() - start;
+
+    // Return structured payload (agent-friendly, follows OpenClaw convention)
     return [{
-      answer,
-      sources: sources.map((s) => `${s.title} ${s.url}`).join('\n'),
+      query,
+      provider: 'gemini',
+      model,
+      tookMs,
+      content,
+      citations: JSON.stringify(citations),
     }];
   },
 });

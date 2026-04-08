@@ -103,7 +103,8 @@ cli({
 
     const results: Record<string, string>[] = [];
 
-    const apiKey = process.env.GOOGLE_API_KEY!;
+    const { getGeminiApiKey } = await import('./_shared/api.js');
+    const apiKey = getGeminiApiKey();
 
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];

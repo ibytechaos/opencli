@@ -1,7 +1,7 @@
 /**
  * Shared API helper for Google Gemini REST API.
  *
- * Auth is via the GOOGLE_API_KEY environment variable, passed as a query parameter.
+ * Auth via GOOGLE_API_KEY, passed as x-goog-api-key header (same as OpenClaw).
  * Uses Node.js built-in fetch() (Node 20+).
  */
 
@@ -10,12 +10,12 @@ import { CliError } from '@jackwener/opencli/errors';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 function getApiKey(): string {
-  const key = process.env.GOOGLE_API_KEY;
+  const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!key) {
     throw new CliError(
       'AUTH_MISSING',
-      'GOOGLE_API_KEY environment variable is not set',
-      'Set it via: export GOOGLE_API_KEY=your_key',
+      'GOOGLE_API_KEY (or GEMINI_API_KEY) environment variable is not set',
+      'Set it via: export GOOGLE_API_KEY=your_key (get from https://aistudio.google.com/apikey)',
     );
   }
   return key;
@@ -23,11 +23,6 @@ function getApiKey(): string {
 
 /**
  * Make an authenticated request to the Gemini API.
- *
- * @param method  HTTP method (GET, POST, etc.)
- * @param path    API path, e.g. `/models/gemini-2.0-flash-exp:generateContent`
- * @param body    Optional JSON body (will be serialised automatically)
- * @returns       Parsed JSON response
  */
 export async function geminiApi(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -35,17 +30,15 @@ export async function geminiApi(
   body?: Record<string, unknown>,
 ): Promise<any> {
   const key = getApiKey();
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${BASE_URL}${path}${sep}key=${key}`;
+  const url = `${BASE_URL}${path}`;
 
-  const init: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-goog-api-key': key,
   };
 
-  if (body) {
-    init.body = JSON.stringify(body);
-  }
+  const init: RequestInit = { method, headers };
+  if (body) init.body = JSON.stringify(body);
 
   const res = await fetch(url, init);
 
@@ -59,4 +52,9 @@ export async function geminiApi(
   }
 
   return res.json();
+}
+
+/** Expose API key for download operations (e.g. Veo video URI) */
+export function getGeminiApiKey(): string {
+  return getApiKey();
 }

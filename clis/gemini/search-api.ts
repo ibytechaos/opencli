@@ -31,7 +31,7 @@ cli({
 
     const data = await geminiApi('POST', `/models/${model}:generateContent`, {
       contents: [{ parts: [{ text: query }] }],
-      tools: [{ googleSearch: {} }],
+      tools: [{ google_search: {} }],
     });
 
     const candidate = data?.candidates?.[0];

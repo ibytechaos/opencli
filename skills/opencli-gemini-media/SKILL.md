@@ -1,7 +1,7 @@
 ---
 name: opencli-gemini-media
-description: "Use when generating images or videos with Google Gemini API (Imagen 4, Veo 3). Examples: '生成图片', 'generate image', 'create video', 'opencli gemini image-api'"
-version: 1.1.0
+description: "Use when generating images or videos with Google Gemini API (Imagen 4, Veo 3, Google Search). Examples: '生成图片', 'generate image', 'create video', 'opencli gemini image-api'"
+version: 1.2.0
 author: wuzhipeng
 tags: [gemini, imagen, veo, image-generation, video-generation, opencli]
 allowed-tools: Bash(opencli:*), Read, Write
@@ -88,3 +88,14 @@ opencli gemini video-api "cinematic city" --model veo-2.0-generate-001         #
 | Veo duration 传 5 或 10 | 实际范围 4-8 秒 |
 | Veo 返回 base64 | 实际返回 URI，需下载 |
 | `--duration` 被解析为 string | 需 `Number()` 强制转换 |
+
+## Google Search（API 版）
+
+```bash
+opencli gemini search-api "具身机器人开源项目"                    # 中文搜索
+opencli gemini search-api "latest TypeScript features 2026"      # 英文搜索
+opencli gemini search-api "DORA-RS" --model gemini-2.5-flash-lite  # 指定模型
+```
+
+> 使用 Gemini 的 Google Search grounding 功能，返回答案 + 引用来源。
+> 无需浏览器，纯 API 调用。默认模型 `gemini-2.5-flash`。
